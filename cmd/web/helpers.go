@@ -2,19 +2,20 @@ package main
 
 import (
 	"bytes"
-    "errors"
+	"errors"
 	"fmt"
+	"github.com/go-playground/form/v4"
 	"net/http"
 	"runtime/debug"
-    "time"
-    "github.com/go-playground/form/v4"
+	"time"
 )
 
 func (app *application) newTemplateData(r *http.Request) *templateData {
-    return &templateData{
-        CurrentYear: time.Now().Year(),
-        Flash: app.sessionManager.PopString(r.Context(), "flash"),
-    }
+	return &templateData{
+		CurrentYear:     time.Now().Year(),
+		Flash:           app.sessionManager.PopString(r.Context(), "flash"),
+		IsAuthenticated: app.isAuthenticated(r),
+	}
 }
 func (app *application) serverError(w http.ResponseWriter, err error) {
 	trace := fmt.Sprintf("%s\n%s", err.Error(), debug.Stack())
@@ -41,24 +42,27 @@ func (app *application) render(w http.ResponseWriter, status int, page string, d
 	err := ts.ExecuteTemplate(buf, "base", data)
 	if err != nil {
 		app.serverError(w, err)
-        return
+		return
 	}
 
 	w.WriteHeader(status)
 	buf.WriteTo(w)
 }
 func (app *application) decodePostForm(r *http.Request, dst any) error {
-    err := r.ParseForm()
-    if err  != nil {
-        return err
-    }
-    err = app.formDecoder.Decode(dst, r.PostForm)
-    if err != nil {
-        var invalidDecoderError *form.InvalidDecoderError
-        if errors.As(err, &invalidDecoderError){
-            panic(err)
-        }
-        return err
-    }
-    return nil
+	err := r.ParseForm()
+	if err != nil {
+		return err
+	}
+	err = app.formDecoder.Decode(dst, r.PostForm)
+	if err != nil {
+		var invalidDecoderError *form.InvalidDecoderError
+		if errors.As(err, &invalidDecoderError) {
+			panic(err)
+		}
+		return err
+	}
+	return nil
+}
+func (app *application) isAuthenticated(r *http.Request) bool {
+	return app.sessionManager.Exists(r.Context(), "authenticatedUserID")
 }
